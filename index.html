@@ -185,7 +185,7 @@ select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px 
 <div class="alarm" id="alarm" hidden><div>
   <div class="bell" aria-hidden="true">⏰</div>
   <h2>6 months saved!</h2>
-  <p id="alarmText">You ticked all 12 paydays. Your Emergency Shield is complete. Time to start Phase B: Pag-IBIG MP2, index funds and sinking funds.</p>
+  <p id="alarmText">You ticked all 12 paydays. Your Emergency Shield is complete. Phase B is now active in your Savings tab.</p>
   <button id="stopAlarm">Stop alarm</button>
 </div></div>
 <div class="toast" id="toast" hidden></div>
@@ -228,13 +228,25 @@ const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 
 /* ---------- state + storage ---------- */
 const LS="sahod-tracker-v1";
-let S={periods:{},savings:{start:"2026-11",ticks:Array(TICKS).fill(false)}};
+const B_FUNDS=[
+ {id:"mp2",name:"Pag-IBIG MP2",short:"MP2",amt:3500,color:"--ess",s:"Tax-free, 5-year lock-in"},
+ {id:"etf",name:"Index Funds / ETFs",short:"ETF",amt:2200,color:"--fun",s:"FMETF, Gotrade or equity UITFs"},
+ {id:"sink",name:"Sinking Funds",short:"Sinking",amt:2000,color:"--debt",s:"Annual fees, medical, gadgets, travel"}];
+const B_PER=B_FUNDS.reduce((a,f)=>a+f.amt,0);
+const SINK_FOR=["Annual fees","Medical","Gadgets","Travel","Insurance","Other"];
+function normB(b){b=b&&typeof b==="object"?b:{};const paid={};
+  if(b.paid&&typeof b.paid==="object")Object.keys(b.paid).forEach(k=>{if(/^\d{4}-\d{2}-\d{2}$/.test(k)&&b.paid[k]){const r={};B_FUNDS.forEach(f=>{if(b.paid[k][f.id])r[f.id]=true});paid[k]=r;}});
+  return{paid,mp2Rate:+b.mp2Rate>0&&+b.mp2Rate<30?+b.mp2Rate:7,etfValue:b.etfValue==null||isNaN(+b.etfValue)?null:+b.etfValue,etfValueDate:typeof b.etfValueDate==="string"?b.etfValueDate:null,
+    sinkUses:Array.isArray(b.sinkUses)?b.sinkUses.filter(x=>x&&+x.amt>0).map(x=>({id:String(x.id),amt:+x.amt,purpose:String(x.purpose||"Other").slice(0,30),note:String(x.note||"").slice(0,60),date:String(x.date||"")})):[]};}
+let S={periods:{},savings:{start:"2026-11",ticks:Array(TICKS).fill(false)},phaseB:normB(null)};
 try{const c=JSON.parse(localStorage.getItem(LS)||"null");if(c&&c.periods)S=c;}catch(e){}
 if(!Array.isArray(S.savings.ticks)||S.savings.ticks.length!==TICKS)S.savings.ticks=Array(TICKS).fill(false);
+S.phaseB=normB(S.phaseB);
 const cache=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
 function persist(){cache();}
 const savePeriod=k=>persist(k,{items:(S.periods[k]||{items:[]}).items});
 const saveSavings=()=>persist("savings",{start:S.savings.start,ticks:S.savings.ticks});
+const savePhaseB=()=>persist("phaseb",JSON.parse(JSON.stringify(S.phaseB)));
 
 
 /* ---------- UI ---------- */
@@ -263,6 +275,8 @@ function renderHome(){
     h+=`</section>`;});
   const t=ticked(),lb=lastBackup(),hasData=Object.keys(S.periods).length||t;
   if(hasData&&(!lb||Date.now()-lb>14*864e5))h+=`<section class="card mini" style="border-color:var(--warn)"><div style="font-size:14px"><b>${lb?"Backup is over 2 weeks old.":"No backup yet."}</b> Save a copy to your phone so you never lose your data.</div><button class="link" data-go="plan">Back up</button></section>`;
+  if(bActive()){const T=bTotals(),ck=iso(bPaydays()[0]),n=B_FUNDS.filter(f=>(S.phaseB.paid[ck]||{})[f.id]).length;
+    return h+`<section class="card"><div class="mini"><div><div class="label">Phase B · Wealth Expansion</div><div style="font-weight:700"><span class="num">${peso(T.value)}</span> · this payday ${n} of 3 done</div></div><button class="link" data-go="savings">Open</button></div></section>`;}
   h+=`<section class="card"><div class="mini"><div><div class="label">Emergency Shield</div><div style="font-weight:700">${t} of 12 paydays saved · <span class="num">${peso(t*SAVE_PER)}</span></div></div><button class="link" data-go="savings">Open</button></div>
    <div class="track"><b style="width:${t/TICKS*100}%"></b><span></span></div></section>`;
   return h;
@@ -280,7 +294,70 @@ function renderHistory(){
 }
 function tickLabel(i){const [y,m]=S.savings.start.split("-").map(Number);const mi=(m-1)+Math.floor(i/2);
   const d=new Date(y,mi,i%2?25:10);return{month:MONL[d.getMonth()]+" "+d.getFullYear(),day:MON[d.getMonth()]+" "+d.getDate()};}
+const bActive=()=>ticked()===TICKS||Object.keys(S.phaseB.paid).length>0;
+function bStart(){const[y,m]=S.savings.start.split("-").map(Number);return new Date(y,m-1+6,10);}
+function bPaydays(){const out=[];let p=bStart();const cur=periodStart(new Date());const last=cur>p?cur:p;let g=0;
+  while(p<=last&&g<500){out.push(p);p=shiftPeriod(p,1);g++;}return out.reverse();}
+function bTotals(){const B=S.phaseB,c={mp2:0,etf:0,sink:0};let first=null,mp2Div=0;const now=Date.now();
+  Object.keys(B.paid).forEach(k=>{B_FUNDS.forEach(f=>{if(B.paid[k][f.id]){c[f.id]+=f.amt;
+    if(f.id==="mp2"){if(!first||k<first)first=k;const yrs=Math.max(0,(now-parse(k))/(365.25*864e5));mp2Div+=f.amt*(Math.pow(1+B.mp2Rate/100,yrs)-1);}}})});
+  const used=B.sinkUses.reduce((a,x)=>a+x.amt,0);
+  const etfNow=B.etfValue==null?c.etf:B.etfValue;
+  const contributed=c.mp2+c.etf+c.sink;
+  const value=c.mp2+mp2Div+etfNow+(c.sink-used);
+  return{c,mp2Div,first,used,etfNow,contributed,value,growth:mp2Div+(etfNow-c.etf)};}
+const dLabel=d=>MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear();
+let sinkArm=null;
+function renderPhaseB(){
+  const B=S.phaseB,T=bTotals(),days=bPaydays(),cur=days[0],ck=iso(cur),cp=B.paid[ck]||{};
+  const isNow=pkey(cur)===pkey(periodStart(new Date()));
+  const doneNow=B_FUNDS.filter(f=>cp[f.id]).length;
+  const g=T.growth;
+  let h=`<section class="hero" style="background:var(--wealth)"><div class="label">Phase B · Wealth Expansion</div>
+   <div><div class="big num">${peso(T.value)}</div><div style="font-size:13px;opacity:.85;margin-top:4px">total value across MP2, ETFs and sinking funds</div></div>
+   <div class="row"><span>Put in <span class="num">${peso(T.contributed)}</span></span><span>Growth <span class="num">${g>=0?"+":"−"}${peso(Math.abs(g))}</span></span></div></section>
+  <section class="card"><div class="mini"><div><div class="label">${isNow?"This payday":"First Phase B payday"}</div><h3 style="font-size:17px">${MON[cur.getMonth()]} ${cur.getDate()} · ${doneNow} of 3 done</h3></div><span class="num" style="color:var(--muted)">${peso(B_PER)}</span></div>`;
+  B_FUNDS.forEach(f=>{const on=!!cp[f.id];
+    h+=`<button class="tick ${on?"on":""}" data-btick="${ck}|${f.id}" aria-pressed="${on}"><span class="box">✓</span><span style="flex:1"><b>${f.name}</b><small>${f.s}</small></span><span class="num">${peso(f.amt)}</span></button>`;});
+  h+=`</section>`;
+  // MP2
+  const mat=T.first?parse(T.first):null;if(mat)mat.setFullYear(mat.getFullYear()+5);
+  h+=`<section class="card"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--ess)"></span>Pag-IBIG MP2</span><span class="num" style="font-weight:700">${peso(T.c.mp2+T.mp2Div)}</span></div>
+   <div class="line" style="border:0;padding:0"><span>Contributed</span><span class="num">${peso(T.c.mp2)}</span><span>Est. dividends</span><span class="num" style="color:var(--ok)">+${peso(T.mp2Div)}</span></div>
+   <div class="two"><div class="field"><label class="label" for="mp2Rate">Dividend rate / yr</label><select id="mp2Rate">${[5,5.5,6,6.5,7,7.5,8].map(r=>`<option value="${r}" ${r===B.mp2Rate?"selected":""}>${r}%</option>`).join("")}</select></div>
+   <div class="field"><span class="label">Matures</span><div style="padding:11px 0;font-weight:600">${mat?dLabel(mat):"After first payment"}</div></div></div>
+   <div style="font-size:12px;color:var(--muted)">Estimate only. Check your actual balance in the Virtual Pag-IBIG app.</div></section>`;
+  // ETF
+  const eg=T.etfNow-T.c.etf,ep=T.c.etf?eg/T.c.etf*100:0;
+  h+=`<section class="card"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--fun)"></span>Index Funds / ETFs</span><span class="num" style="font-weight:700">${peso(T.etfNow)}</span></div>
+   <div class="line" style="border:0;padding:0"><span>Contributed</span><span class="num">${peso(T.c.etf)}</span><span>Gain / loss</span><span class="num" style="color:${eg<0?"var(--danger)":"var(--ok)"}">${eg>=0?"+":"−"}${peso(Math.abs(eg))} (${eg>=0?"+":"−"}${Math.abs(ep).toFixed(1)}%)</span></div>
+   <div class="field"><label class="label" for="etfVal">Current value from your broker app</label>
+   <div style="display:flex;gap:8px"><input id="etfVal" inputmode="decimal" placeholder="${T.c.etf||"0"}" value="${B.etfValue==null?"":B.etfValue}" style="flex:1;min-width:0"><button class="ghost" id="etfSave">Update</button></div></div>
+   <div style="font-size:12px;color:var(--muted)">${B.etfValueDate?"Value last updated "+dLabel(parse(B.etfValueDate)):"Not updated yet, so showing what you put in."}</div></section>`;
+  // Sinking
+  const bal=T.c.sink-T.used;
+  h+=`<section class="card"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--debt)"></span>Sinking Funds</span><span class="num" style="font-weight:700;${bal<0?"color:var(--danger)":""}">${peso(bal)}</span></div>
+   <div class="line" style="border:0;padding:0"><span>Saved</span><span class="num">${peso(T.c.sink)}</span><span>Used</span><span class="num">${peso(T.used)}</span></div>
+   <div class="two"><div class="field"><label class="label" for="sinkAmt">Use amount</label><input id="sinkAmt" inputmode="decimal" placeholder="₱0"></div>
+   <div class="field"><label class="label" for="sinkFor">For</label><select id="sinkFor">${SINK_FOR.map(x=>`<option>${x}</option>`).join("")}</select></div></div>
+   <input id="sinkNote" placeholder="Note, e.g. phone repair" maxlength="60" aria-label="Note">
+   <button class="ghost" id="sinkUse">Record use of sinking fund</button>`;
+  B.sinkUses.slice().sort((a,b)=>b.date.localeCompare(a.date)).forEach(x=>{
+    h+=`<div class="tx"><span class="dot" style="background:var(--debt)"></span><div class="t"><div>${esc(x.note||x.purpose)}</div><div>${esc(x.purpose)} · ${x.date?dLabel(parse(x.date)):""}</div></div><span class="num" style="font-weight:700">−${peso(x.amt)}</span><button class="del ${sinkArm===x.id?"arm":""}" data-sdel="${x.id}">${sinkArm===x.id?"Tap to confirm":"Delete"}</button></div>`;});
+  h+=`</section>`;
+  // history
+  if(days.length>1){h+=`<section class="card"><div class="label">Earlier paydays</div>`;
+    days.slice(1).forEach(d=>{const k=iso(d),pp=B.paid[k]||{};
+      h+=`<div class="mini" style="border-top:1px dashed var(--line);padding-top:8px"><span style="font-weight:600;white-space:nowrap">${MON[d.getMonth()]} ${d.getDate()}</span><div class="chips" style="justify-content:flex-end">${B_FUNDS.map(f=>`<button class="chip" style="--c:var(${f.color})" data-btick="${k}|${f.id}" aria-pressed="${!!pp[f.id]}">${f.short}</button>`).join("")}</div></div>`;});
+    h+=`</section>`;}
+  return h;
+}
 function renderSavings(){
+  if(!bActive())return renderPhaseA();
+  const t=ticked();
+  return renderPhaseB()+`<section class="bucket"><button data-b="phaseA" aria-expanded="${!!openB.phaseA}"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--wealth)"></span>Phase A · Emergency Shield</span><span class="num">${peso(t*SAVE_PER)}</span></div><div class="bleft">${t===TICKS?"Complete · 6 months saved":t+" of 12 paydays"} · ${openB.phaseA?"Hide":"Show"} checklist</div></button></section>`+(openB.phaseA?renderPhaseA():"");
+}
+function renderPhaseA(){
   const t=ticked();
   let opts="";const now=new Date();for(let k=-12;k<=6;k++){const d=new Date(now.getFullYear(),now.getMonth()+k,1);const v=d.getFullYear()+"-"+pad(d.getMonth()+1);opts+=`<option value="${v}" ${v===S.savings.start?"selected":""}>${MONL[d.getMonth()]} ${d.getFullYear()}</option>`;}
   let h=`<section class="card goal"><div class="label">Phase A · Emergency Shield</div>
@@ -288,7 +365,6 @@ function renderSavings(){
    <div class="track"><b style="width:${t/TICKS*100}%"></b><span title="3 months"></span></div>
    <div class="marks"><span>Start</span><span>3 months · ${peso(GOAL/2)}</span><span>6 months</span></div>
    <div style="font-size:13px;color:var(--muted)">Tick a payday once you've moved ₱7,700 to your digital bank savings. When all 12 are ticked, the alarm rings.</div></section>`;
-  if(t===TICKS)h+=`<div class="done">🎉 Six months saved. Move your ₱7,700 per cut-off to Phase B: MP2 ₱3,500, index funds ₱2,200, sinking funds ₱2,000.</div>`;
   h+=`<div class="field"><label class="label" for="startM">First saving month</label><select id="startM">${opts}</select></div><div class="months">`;
   for(let m=0;m<6;m++){const a=tickLabel(m*2);h+=`<div class="month"><h3>Month ${m+1}</h3><div class="label">${a.month}</div>`;
     for(const i of [m*2,m*2+1]){const on=S.savings.ticks[i],L=tickLabel(i);
@@ -342,16 +418,26 @@ view.addEventListener("click",e=>{
   else if(b.dataset.del){const id=b.dataset.del;
     if(armed!==id){armed=id;document.querySelectorAll(".del").forEach(x=>{x.classList.remove("arm");x.textContent="Delete"});b.classList.add("arm");b.textContent="Tap to confirm";return;}
     const k=pkey(viewP);S.periods[k].items=S.periods[k].items.filter(x=>x.id!==id);armed=null;savePeriod(k);render();toast("Expense deleted");}
-  else if(b.dataset.tick){const i=+b.dataset.tick,before=ticked();S.savings.ticks[i]=!S.savings.ticks[i];saveSavings();render();
-    if(before<TICKS&&ticked()===TICKS)ringAlarm();}
+  else if(b.dataset.tick){const i=+b.dataset.tick,before=ticked();S.savings.ticks[i]=!S.savings.ticks[i];saveSavings();
+    if(before<TICKS&&ticked()===TICKS){openB.phaseA=false;render();window.scrollTo(0,0);ringAlarm();}else render();}
+  else if(b.dataset.btick){const[k,f]=b.dataset.btick.split("|");const P=S.phaseB.paid;P[k]=Object.assign({},P[k]);
+    if(P[k][f])delete P[k][f];else P[k][f]=true;if(!Object.keys(P[k]).length)delete P[k];savePhaseB();render();}
+  else if(b.id==="etfSave"){const v=document.getElementById("etfVal").value.trim();
+    if(v===""){S.phaseB.etfValue=null;S.phaseB.etfValueDate=null;}else{const n=parseFloat(v.replace(/[,₱\s]/g,""));if(!(n>=0)){toast("Enter the value in pesos");return;}S.phaseB.etfValue=Math.round(n*100)/100;S.phaseB.etfValueDate=iso(new Date());}
+    savePhaseB();render();toast("ETF value updated");}
+  else if(b.id==="sinkUse"){const n=parseFloat(document.getElementById("sinkAmt").value.replace(/[,₱\s]/g,""));if(!(n>0)){toast("Enter an amount above ₱0");return;}
+    S.phaseB.sinkUses=S.phaseB.sinkUses.concat([{id:Date.now().toString(36),amt:Math.round(n*100)/100,purpose:document.getElementById("sinkFor").value,note:document.getElementById("sinkNote").value.trim(),date:iso(new Date())}]);
+    savePhaseB();render();toast(peso(n)+" taken from sinking funds");}
+  else if(b.dataset.sdel){const id=b.dataset.sdel;if(sinkArm!==id){sinkArm=id;render();return;}
+    sinkArm=null;S.phaseB.sinkUses=S.phaseB.sinkUses.filter(x=>x.id!==id);savePhaseB();render();toast("Entry deleted");}
   else if(b.id==="testAlarm")ringAlarm(true);
   else if(b.id==="exportB")exportBackup();
   else if(b.id==="importB"){const f=document.getElementById("importF");f.value="";f.click();}
   else if(b.id==="cancelRestore"){pendingRestore=null;render();}
   else if(b.id==="confirmRestore"){const r=pendingRestore;pendingRestore=null;
-    const old=Object.keys(S.periods);S={periods:r.periods,savings:r.savings};
+    const old=Object.keys(S.periods);S={periods:r.periods,savings:r.savings,phaseB:r.phaseB};
     old.filter(k=>!S.periods[k]).forEach(k=>{S.periods[k]={items:[]};});
-    Object.keys(S.periods).forEach(savePeriod);saveSavings();render();toast("Backup restored");}
+    Object.keys(S.periods).forEach(savePeriod);saveSavings();savePhaseB();render();toast("Backup restored");}
   else if(b.id==="copyBtn"){const ta=document.getElementById("copyArea");
     const sel=()=>{ta.focus();ta.select();toast("Text selected. Tap Copy.");};
     try{navigator.clipboard.writeText(copyText).then(()=>{markBackup();toast("Backup copied");},sel);}catch(e){sel();}}
@@ -363,7 +449,7 @@ const LB="sahod-tracker-lastbackup";
 function lastBackup(){try{const v=+localStorage.getItem(LB);return v?new Date(v):null}catch(e){return null}}
 function markBackup(){try{localStorage.setItem(LB,String(Date.now()))}catch(e){}}
 async function exportBackup(){
-  const data=JSON.stringify({app:"sahod-tracker",version:1,saved:new Date().toISOString(),periods:S.periods,savings:S.savings});
+  const data=JSON.stringify({app:"sahod-tracker",version:1,saved:new Date().toISOString(),periods:S.periods,savings:S.savings,phaseB:S.phaseB});
   const name="sahod-backup-"+iso(new Date())+".json";
   try{const file=new File([data],name,{type:"application/json"});
     if(navigator.canShare&&navigator.canShare({files:[file]})&&/iPhone|iPad|iPod/.test(navigator.userAgent)){
@@ -381,7 +467,7 @@ function readBackup(txt){
     periods[k]={items:o.periods[k].items.filter(x=>x&&x.amt>0&&x.cat&&x.date).map(x=>({id:String(x.id),amt:+x.amt,cat:String(x.cat),note:String(x.note||"").slice(0,60),date:String(x.date),t:+x.t||0}))};});
   const ticks=Array.isArray(o.savings.ticks)&&o.savings.ticks.length===TICKS?o.savings.ticks.map(Boolean):Array(TICKS).fill(false);
   const d=new Date(o.saved);
-  return{periods,savings:{start:/^\d{4}-\d{2}$/.test(o.savings.start)?o.savings.start:"2026-11",ticks},label:isNaN(d)?"an unknown date":MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear()};
+  return{periods,phaseB:normB(o.phaseB),savings:{start:/^\d{4}-\d{2}$/.test(o.savings.start)?o.savings.start:"2026-11",ticks},label:isNaN(d)?"an unknown date":MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear()};
 }
 document.getElementById("importF").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0];if(!f)return;
@@ -390,7 +476,8 @@ document.getElementById("importF").addEventListener("change",e=>{
     pendingRestore=r;tab="plan";render();document.getElementById("backupCard").scrollIntoView({block:"center"});};
   rd.readAsText(f);
 });
-view.addEventListener("change",e=>{if(e.target.id==="startM"){S.savings.start=e.target.value;saveSavings();render();}});
+view.addEventListener("change",e=>{if(e.target.id==="startM"){S.savings.start=e.target.value;saveSavings();render();}
+  else if(e.target.id==="mp2Rate"){S.phaseB.mp2Rate=+e.target.value;savePhaseB();render();}});
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{if(b.dataset.tab==="history")viewP=periodStart(new Date());go(b.dataset.tab)}));
 
 /* ---------- add expense sheet ---------- */
@@ -419,7 +506,7 @@ function beep(){if(!actx)return;const t=actx.currentTime;[0,.18,.36].forEach((o,
   os.type="square";os.frequency.value=j===2?1320:988;g.gain.setValueAtTime(.0001,t+o);g.gain.exponentialRampToValueAtTime(.25,t+o+.02);g.gain.exponentialRampToValueAtTime(.0001,t+o+.15);
   os.connect(g).connect(actx.destination);os.start(t+o);os.stop(t+o+.16);});}
 function ringAlarm(test){
-  document.getElementById("alarmText").textContent=test?"This is how the alarm sounds when you tick your 12th payday. Turn your volume up.":"You ticked all 12 paydays: "+peso(GOAL)+" saved. Your Emergency Shield is complete. Time to start Phase B: Pag-IBIG MP2, index funds and sinking funds.";
+  document.getElementById("alarmText").textContent=test?"This is how the alarm sounds when you tick your 12th payday. Turn your volume up.":"You ticked all 12 paydays: "+peso(GOAL)+" saved. Your Emergency Shield is complete. Phase B is now active in your Savings tab: MP2 ₱3,500, index funds ₱2,200 and sinking funds ₱2,000 per payday.";
   document.getElementById("alarm").hidden=false;
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume&&actx.resume();}catch(e){}
   beep();clearInterval(beepTimer);beepTimer=setInterval(()=>{beep();try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}},900);
