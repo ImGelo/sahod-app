@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sahod Tracker</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Sahod">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14385f">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: one-column phone app, sticky top summary, bottom tab bar; ink-blue payslip identity */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --surface-2:#e9eef4; --line:#d6dee8;
+  --ink:#152233; --muted:#5d6b7d; --accent:#14385f; --accent-fg:#ffffff;
+  --ess:#2f6db5; --wealth:#1d8a5f; --debt:#c0603a; --fun:#9a5bc4;
+  --danger:#c23a3a; --warn:#b7791f; --ok:#1d8a5f;
+  --display:"Bricolage Grotesque",ui-sans-serif,system-ui,sans-serif;
+  --body:"Figtree",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --num:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d141d; --surface:#152030; --surface-2:#1c2a3d; --line:#2a3a50;
+  --ink:#e6edf5; --muted:#93a3b8; --accent:#7fb2ec; --accent-fg:#0b1624;
+  --ess:#6ea6e6; --wealth:#4cc28f; --debt:#e88a62; --fun:#c493e6;
+  --danger:#ef6b6b; --warn:#e3a94a; --ok:#4cc28f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d141d; --surface:#152030; --surface-2:#1c2a3d; --line:#2a3a50;
+  --ink:#e6edf5; --muted:#93a3b8; --accent:#7fb2ec; --accent-fg:#0b1624;
+  --ess:#6ea6e6; --wealth:#4cc28f; --debt:#e88a62; --fun:#c493e6;
+  --danger:#ef6b6b; --warn:#e3a94a; --ok:#4cc28f; color-scheme:dark}
+html,body{background:var(--bg);color:var(--ink);margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{-webkit-tap-highlight-color:transparent}
+body{font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+.app{max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px;padding-block:14px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+.num{font-family:var(--num);font-variant-numeric:tabular-nums}
+.label{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .mark{width:34px;height:34px;border-radius:10px;background:var(--accent);color:var(--accent-fg);display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:18px}
+.brand h1{font-size:20px}
+.sync{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.sync.on i{background:var(--ok)}
+
+.hero{background:var(--accent);color:var(--accent-fg);border-radius:20px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.hero .label{color:inherit;opacity:.75}
+.hero .big{font-family:var(--display);font-weight:800;font-size:40px;line-height:1}
+.hero .row{display:flex;justify-content:space-between;gap:10px;font-size:13px;opacity:.9;flex-wrap:wrap}
+.meter{height:8px;border-radius:99px;background:color-mix(in srgb,currentColor 18%,transparent);overflow:hidden}
+.meter b{display:block;height:100%;border-radius:99px;background:currentColor;transition:width .3s}
+
+.bucket{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.bucket>button{all:unset;box-sizing:border-box;width:100%;padding:14px;display:flex;flex-direction:column;gap:8px;cursor:pointer}
+.bucket>button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.bname{display:flex;align-items:center;gap:8px;font-weight:700}
+.dot{width:10px;height:10px;border-radius:3px;flex:none}
+.bleft{font-size:13px;color:var(--muted)}
+.bleft.over{color:var(--danger);font-weight:600}
+.bar{height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.bar b{display:block;height:100%;border-radius:99px;transition:width .3s}
+.lines{border-top:1px solid var(--line);padding:6px 14px 12px;display:flex;flex-direction:column}
+.line{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:14px}
+.line:last-child{border-bottom:0}
+.line .s{grid-column:1/-1;font-size:12px;color:var(--muted)}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:10px}
+.mini{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.link{background:none;border:0;color:var(--accent);font-weight:600;padding:0}
+
+.pnav{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.pnav button{width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface)}
+.pnav button:disabled{opacity:.35;cursor:default}
+.pnav div{text-align:center}
+.day{font-size:12px;color:var(--muted);font-weight:600;margin-top:6px}
+.tx{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.tx .t{flex:1;min-width:0}
+.tx .t div:first-child{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx .t div:last-child{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tx .del{border:0;background:none;color:var(--muted);font-size:12px;padding:6px 4px}
+.tx .del.arm{color:var(--danger);font-weight:700}
+.empty{text-align:center;color:var(--muted);padding:28px 10px;border:1px dashed var(--line);border-radius:var(--r)}
+
+.goal{display:flex;flex-direction:column;gap:10px}
+.goalnum{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.goalnum .big{font-family:var(--display);font-weight:800;font-size:32px}
+.track{position:relative;height:12px;border-radius:99px;background:var(--surface-2)}
+.track b{position:absolute;inset:0 auto 0 0;border-radius:99px;background:var(--wealth);transition:width .3s}
+.track span{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--muted);left:50%}
+.marks{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.months{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.month{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px;display:flex;flex-direction:column;gap:8px}
+.month h3{font-size:15px}
+.tick{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:9px 10px;text-align:left;width:100%}
+.tick .box{width:22px;height:22px;border-radius:7px;border:2px solid var(--muted);display:grid;place-items:center;flex:none;color:transparent;font-weight:800;font-size:14px}
+.tick.on{border-color:var(--wealth);background:color-mix(in srgb,var(--wealth) 14%,var(--surface))}
+.tick.on .box{background:var(--wealth);border-color:var(--wealth);color:#fff}
+.tick small{display:block;color:var(--muted);font-size:11px}
+.field{display:flex;flex-direction:column;gap:6px}
+select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:11px 12px;width:100%;box-sizing:border-box}
+.done{background:color-mix(in srgb,var(--wealth) 16%,var(--surface));border:1px solid var(--wealth);border-radius:var(--r);padding:14px;font-weight:600}
+.ghost{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 12px;font-weight:600}
+
+.tabs{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);
+  padding:8px max(16px,env(safe-area-inset-right,0px)) calc(8px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.tabs nav{max-width:480px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr 64px 1fr 1fr;align-items:center;gap:4px}
+.tab{border:0;background:none;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;font-weight:600;color:var(--muted);padding:4px 0}
+.tab svg{width:22px;height:22px}
+.tab[aria-current="page"]{color:var(--accent)}
+.fab{width:56px;height:56px;border-radius:18px;border:0;background:var(--accent);color:var(--accent-fg);font-size:30px;line-height:1;margin:-26px auto 0;box-shadow:0 6px 18px color-mix(in srgb,var(--accent) 40%,transparent)}
+
+.sheet{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;justify-content:center;background:rgba(8,14,22,.5)}
+.sheet>div{background:var(--surface);width:100%;max-width:520px;border-radius:22px 22px 0 0;max-height:92%;overflow:auto;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(18px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:14px}
+.amt{display:flex;align-items:center;gap:6px;border-bottom:2px solid var(--accent);padding-bottom:4px}
+.amt span{font-family:var(--display);font-size:34px;font-weight:800;color:var(--muted)}
+.amt input{border:0;padding:0;font-family:var(--display);font-size:40px;font-weight:800;background:transparent}
+.amt input:focus-visible{outline:none}
+.cats{display:flex;flex-direction:column;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--surface-2);border-radius:99px;padding:7px 12px;font-size:13px;font-weight:600}
+.chip[aria-pressed="true"]{background:var(--c);border-color:var(--c);color:#fff}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.primary{border:0;background:var(--accent);color:var(--accent-fg);border-radius:14px;padding:14px;font-weight:700;font-size:16px}
+.primary:disabled{opacity:.45}
+.err{color:var(--danger);font-size:13px;min-height:1em}
+
+.alarm{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:var(--wealth);color:#fff;text-align:center;
+  padding:24px max(24px,env(safe-area-inset-right,0px)) 24px max(24px,env(safe-area-inset-left,0px))}
+.alarm>div{display:flex;flex-direction:column;gap:14px;align-items:center;max-width:360px}
+.alarm .bell{font-size:64px;animation:ring .5s ease-in-out infinite alternate;display:inline-block}
+.alarm h2{font-size:30px}
+.alarm button{border:0;background:#fff;color:#11402c;border-radius:16px;padding:16px 28px;font-weight:800;font-size:17px}
+@keyframes ring{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+@media (prefers-reduced-motion:reduce){.alarm .bell{animation:none}.bar b,.meter b,.track b{transition:none}}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:35;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;font-size:14px}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><div class="mark">₱</div><div><h1>Sahod Tracker</h1><div class="label">₱22,000 per cut-off</div></div></div>
+    <div class="sync on" id="sync"><i></i><span>Saved on this phone</span></div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<div class="tabs"><nav>
+  <button class="tab" data-tab="home" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Budget</button>
+  <button class="tab" data-tab="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Expenses</button>
+  <button class="fab" id="fab" aria-label="Add expense">+</button>
+  <button class="tab" data-tab="savings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16v12H4zM4 7l2-3h12l2 3M9 13l2 2 4-4"/></svg>Savings</button>
+  <button class="tab" data-tab="plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 4"/></svg>Plan</button>
+</nav></div>
+
+<div class="sheet" id="sheet" hidden><div role="dialog" aria-labelledby="sheetTitle">
+  <div class="mini"><h2 id="sheetTitle">Add expense</h2><button class="link" id="closeSheet">Cancel</button></div>
+  <label class="amt"><span>₱</span><input id="fAmt" inputmode="decimal" placeholder="0" autocomplete="off" aria-label="Amount"></label>
+  <div class="cats" id="fCats"></div>
+  <div class="two">
+    <div class="field"><label class="label" for="fDate">Date</label><input type="date" id="fDate"></div>
+    <div class="field"><label class="label" for="fNote">Note</label><input id="fNote" placeholder="e.g. Puregold" maxlength="60"></div>
+  </div>
+  <div class="err" id="fErr"></div>
+  <button class="primary" id="fSave">Save expense</button>
+</div></div>
+
+<div class="alarm" id="alarm" hidden><div>
+  <div class="bell" aria-hidden="true">⏰</div>
+  <h2>6 months saved!</h2>
+  <p id="alarmText">You ticked all 12 paydays. Your Emergency Shield is complete. Time to start Phase B: Pag-IBIG MP2, index funds and sinking funds.</p>
+  <button id="stopAlarm">Stop alarm</button>
+</div></div>
+<div class="toast" id="toast" hidden></div>
+<input type="file" id="importF" accept=".json,.txt,application/json,text/plain" hidden>
+
+<script>
+const PLAN=[
+ {id:"ess",name:"Essentials",pct:"50%",budget:11000,color:"--ess",items:[
+  {id:"rent",name:"Housing & Rent",b:3500,s:"Rent, condo dues, maintenance"},
+  {id:"util",name:"Utilities & Internet",b:1500,s:"Meralco, water, fiber, mobile plan"},
+  {id:"groc",name:"Groceries & Home",b:3500,s:"Food stocks, toiletries, household"},
+  {id:"trans",name:"Transportation / Fuel",b:1500,s:"Fares, gas, Beep / AutoSweep"},
+  {id:"daily",name:"Daily Work Allowance",b:1000,s:"On-the-go meals, transit cash"}]},
+ {id:"debt",name:"Debt",pct:"10%",budget:2200,color:"--debt",items:[
+  {id:"cc",name:"Credit Cards / BNPL",b:1500,s:"SPayLater, LazPayLater, CC bill"},
+  {id:"loan",name:"Personal / Informal Loans",b:700,s:"SSS / Pag-IBIG loans, personal debts"}]},
+ {id:"fun",name:"Guilt-Free Fun",pct:"5%",budget:1100,color:"--fun",items:[
+  {id:"dine",name:"Dining Out & Cafes",b:500,s:"Coffee, food delivery, eating out"},
+  {id:"subs",name:"Subscriptions & Leisure",b:300,s:"Netflix, Spotify, movies"},
+  {id:"treat",name:"Personal Rewards",b:300,s:"Splurges, hobby gear"}]}
+];
+const ITEM={};PLAN.forEach(g=>g.items.forEach(i=>ITEM[i.id]={...i,group:g}));
+const SPENDABLE=PLAN.reduce((a,g)=>a+g.budget,0); // 14,300
+const SAVE_PER=7700, TICKS=12, GOAL=SAVE_PER*TICKS;
+const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const MONL=["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+const peso=n=>"₱"+(Math.round(n*100)/100).toLocaleString("en-PH",{minimumFractionDigits:0,maximumFractionDigits:2});
+const pad=n=>String(n).padStart(2,"0");
+const iso=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const parse=s=>{const[y,m,d]=s.split("-").map(Number);return new Date(y,m-1,d)};
+function periodStart(d){const y=d.getFullYear(),m=d.getMonth(),day=d.getDate();
+  if(day>=25)return new Date(y,m,25); if(day>=10)return new Date(y,m,10); return new Date(y,m-1,25);}
+function periodEnd(s){return s.getDate()===10?new Date(s.getFullYear(),s.getMonth(),24):new Date(s.getFullYear(),s.getMonth()+1,9);}
+function shiftPeriod(s,dir){ if(s.getDate()===10) return dir>0?new Date(s.getFullYear(),s.getMonth(),25):new Date(s.getFullYear(),s.getMonth()-1,25);
+  return dir>0?new Date(s.getFullYear(),s.getMonth()+1,10):new Date(s.getFullYear(),s.getMonth(),10);}
+const pkey=s=>"p-"+iso(s);
+const fmtRange=s=>{const e=periodEnd(s);return MON[s.getMonth()]+" "+s.getDate()+" – "+MON[e.getMonth()]+" "+e.getDate()};
+const esc=t=>String(t).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- state + storage ---------- */
+const LS="sahod-tracker-v1";
+let S={periods:{},savings:{start:"2026-11",ticks:Array(TICKS).fill(false)}};
+try{const c=JSON.parse(localStorage.getItem(LS)||"null");if(c&&c.periods)S=c;}catch(e){}
+if(!Array.isArray(S.savings.ticks)||S.savings.ticks.length!==TICKS)S.savings.ticks=Array(TICKS).fill(false);
+const cache=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
+function persist(){cache();}
+const savePeriod=k=>persist(k,{items:(S.periods[k]||{items:[]}).items});
+const saveSavings=()=>persist("savings",{start:S.savings.start,ticks:S.savings.ticks});
+
+
+/* ---------- UI ---------- */
+let tab="home", viewP=periodStart(new Date()), openB={ess:true};
+const view=document.getElementById("view");
+function spentIn(k){const it=(S.periods[k]||{items:[]}).items;const by={};let tot=0;
+  it.forEach(x=>{by[x.cat]=(by[x.cat]||0)+x.amt;tot+=x.amt});return{by,tot,items:it};}
+const ticked=()=>S.savings.ticks.filter(Boolean).length;
+
+function renderHome(){
+  const cur=periodStart(new Date()),k=pkey(cur),sp=spentIn(k);
+  const left=SPENDABLE-sp.tot,pct=Math.min(100,sp.tot/SPENDABLE*100);
+  const today=new Date(),end=periodEnd(cur),daysLeft=Math.round((end-new Date(today.getFullYear(),today.getMonth(),today.getDate()))/864e5)+1;
+  let h=`<section class="hero"><div class="label">This cut-off · ${fmtRange(cur)}</div>
+   <div><div class="big num">${peso(Math.max(left,0))}</div><div style="font-size:13px;opacity:.85;margin-top:4px">${left>=0?"left to spend":"over budget by "+peso(-left)}</div></div>
+   <div class="meter"><b style="width:${pct}%"></b></div>
+   <div class="row"><span>Spent <span class="num">${peso(sp.tot)}</span> of <span class="num">${peso(SPENDABLE)}</span></span><span>${daysLeft} day${daysLeft===1?"":"s"} to next payday</span></div></section>`;
+  PLAN.forEach(g=>{let gs=0;g.items.forEach(i=>gs+=sp.by[i.id]||0);const gl=g.budget-gs;
+    h+=`<section class="bucket"><button data-b="${g.id}" aria-expanded="${!!openB[g.id]}">
+     <div class="bhead"><span class="bname"><span class="dot" style="background:var(${g.color})"></span>${g.name} <span class="label">${g.pct}</span></span>
+     <span class="num">${peso(gs)} <span style="color:var(--muted)">/ ${peso(g.budget)}</span></span></div>
+     <div class="bar"><b style="width:${Math.min(100,gs/g.budget*100)}%;background:${gl<0?"var(--danger)":"var("+g.color+")"}"></b></div>
+     <div class="bleft ${gl<0?"over":""}">${gl<0?"Over by "+peso(-gl):peso(gl)+" left"}</div></button>`;
+    if(openB[g.id]){h+=`<div class="lines">`;g.items.forEach(i=>{const s=sp.by[i.id]||0;
+      h+=`<div class="line"><span>${i.name}</span><span class="num" style="${s>i.b?"color:var(--danger)":""}">${peso(s)} / ${peso(i.b)}</span><span class="s">${i.s}</span></div>`});h+=`</div>`;}
+    h+=`</section>`;});
+  const t=ticked(),lb=lastBackup(),hasData=Object.keys(S.periods).length||t;
+  if(hasData&&(!lb||Date.now()-lb>14*864e5))h+=`<section class="card mini" style="border-color:var(--warn)"><div style="font-size:14px"><b>${lb?"Backup is over 2 weeks old.":"No backup yet."}</b> Save a copy to your phone so you never lose your data.</div><button class="link" data-go="plan">Back up</button></section>`;
+  h+=`<section class="card"><div class="mini"><div><div class="label">Emergency Shield</div><div style="font-weight:700">${t} of 12 paydays saved · <span class="num">${peso(t*SAVE_PER)}</span></div></div><button class="link" data-go="savings">Open</button></div>
+   <div class="track"><b style="width:${t/TICKS*100}%"></b><span></span></div></section>`;
+  return h;
+}
+function renderHistory(){
+  const k=pkey(viewP),sp=spentIn(k),isCur=k===pkey(periodStart(new Date()));
+  let h=`<div class="pnav"><button id="prevP" aria-label="Previous cut-off">‹</button><div><div class="label">${isCur?"This cut-off":"Cut-off"}</div><h2 style="font-size:18px">${fmtRange(viewP)}</h2></div><button id="nextP" aria-label="Next cut-off" ${isCur?"disabled":""}>›</button></div>
+   <div class="card mini"><span>Total spent</span><span class="num" style="font-weight:700">${peso(sp.tot)} / ${peso(SPENDABLE)}</span></div>`;
+  if(!sp.items.length)return h+`<div class="empty">No expenses logged for this cut-off.<br>Tap <b>+</b> to add one.</div>`;
+  const items=sp.items.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.t-a.t);let last="";
+  items.forEach(x=>{const it=ITEM[x.cat]||{name:x.cat,group:{color:"--muted"}};
+    if(x.date!==last){last=x.date;const d=parse(x.date);h+=`<div class="day">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()]}, ${MON[d.getMonth()]} ${d.getDate()}</div>`;}
+    h+=`<div class="tx"><span class="dot" style="background:var(${it.group.color})"></span><div class="t"><div>${esc(x.note||it.name)}</div><div>${x.note?esc(it.name):esc(it.group.name||"")}</div></div><span class="num" style="font-weight:700">${peso(x.amt)}</span><button class="del" data-del="${x.id}" aria-label="Delete">Delete</button></div>`;});
+  return h;
+}
+function tickLabel(i){const [y,m]=S.savings.start.split("-").map(Number);const mi=(m-1)+Math.floor(i/2);
+  const d=new Date(y,mi,i%2?25:10);return{month:MONL[d.getMonth()]+" "+d.getFullYear(),day:MON[d.getMonth()]+" "+d.getDate()};}
+function renderSavings(){
+  const t=ticked();
+  let opts="";const now=new Date();for(let k=-12;k<=6;k++){const d=new Date(now.getFullYear(),now.getMonth()+k,1);const v=d.getFullYear()+"-"+pad(d.getMonth()+1);opts+=`<option value="${v}" ${v===S.savings.start?"selected":""}>${MONL[d.getMonth()]} ${d.getFullYear()}</option>`;}
+  let h=`<section class="card goal"><div class="label">Phase A · Emergency Shield</div>
+   <div class="goalnum"><span class="big num">${peso(t*SAVE_PER)}</span><span style="color:var(--muted)">of <span class="num">${peso(GOAL)}</span> · 6 months</span></div>
+   <div class="track"><b style="width:${t/TICKS*100}%"></b><span title="3 months"></span></div>
+   <div class="marks"><span>Start</span><span>3 months · ${peso(GOAL/2)}</span><span>6 months</span></div>
+   <div style="font-size:13px;color:var(--muted)">Tick a payday once you've moved ₱7,700 to your digital bank savings. When all 12 are ticked, the alarm rings.</div></section>`;
+  if(t===TICKS)h+=`<div class="done">🎉 Six months saved. Move your ₱7,700 per cut-off to Phase B: MP2 ₱3,500, index funds ₱2,200, sinking funds ₱2,000.</div>`;
+  h+=`<div class="field"><label class="label" for="startM">First saving month</label><select id="startM">${opts}</select></div><div class="months">`;
+  for(let m=0;m<6;m++){const a=tickLabel(m*2);h+=`<div class="month"><h3>Month ${m+1}</h3><div class="label">${a.month}</div>`;
+    for(const i of [m*2,m*2+1]){const on=S.savings.ticks[i],L=tickLabel(i);
+      h+=`<button class="tick ${on?"on":""}" data-tick="${i}" aria-pressed="${on}"><span class="box">✓</span><span><span class="num">${peso(SAVE_PER)}</span><small>Payday ${L.day}</small></span></button>`;}
+    h+=`</div>`;}
+  h+=`</div><button class="ghost" id="testAlarm">Test the alarm sound</button>`;
+  return h;
+}
+function renderBackup(){
+  const lb=lastBackup();
+  let h=`<section class="card" id="backupCard"><div class="label">Backup to your phone</div>
+   <p style="margin:0;font-size:14px">Save a copy of all your expenses and savings ticks as a file in your phone's storage (Downloads or Files). If your data is ever lost, restore it from that file.</p>
+   <div style="font-size:13px;color:var(--muted)">${lb?"Last backup: "+MON[lb.getMonth()]+" "+lb.getDate()+", "+lb.getFullYear():"No backup saved yet on this phone"}</div>
+   <div class="two"><button class="primary" id="exportB">Save backup</button><button class="ghost" id="importB">Restore backup</button></div>`;
+  if(pendingRestore){const n=Object.values(pendingRestore.periods).reduce((a,p)=>a+(p.items||[]).length,0);
+    h+=`<div class="done" style="font-weight:500;display:flex;flex-direction:column;gap:10px"><div>Replace what's in the app now with the backup from <b>${esc(pendingRestore.label)}</b>? It has ${n} expense${n===1?"":"s"} and ${pendingRestore.savings.ticks.filter(Boolean).length} of 12 paydays ticked.</div>
+     <div class="two"><button class="primary" id="confirmRestore">Replace with backup</button><button class="ghost" id="cancelRestore">Cancel</button></div></div>`;}
+  if(copyText)h+=`<div class="field"><label class="label" for="copyArea">Saving a file isn't available here. Copy this text and keep it in your Notes app instead.</label>
+   <textarea id="copyArea" readonly style="font:12px var(--num);color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:10px;height:90px;width:100%;box-sizing:border-box">${esc(copyText)}</textarea>
+   <button class="ghost" id="copyBtn">Copy backup text</button></div>`;
+  return h+`<div class="err" id="bErr"></div></section>`;
+}
+function renderPlan(){
+  let h=renderBackup()+`<section class="card"><div class="label">Payday routine · 10th &amp; 25th</div>
+   <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
+   <li><b>Pay yourself first:</b> move ₱7,700 to digital bank savings.</li>
+   <li><b>Settle debt:</b> send ₱2,200 to cards or loans.</li>
+   <li><b>Keep essentials:</b> leave ₱11,000 for bills, rent, groceries.</li>
+   <li><b>Fun money:</b> move ₱1,100 to GCash / Maya.</li></ol></section>
+   <section class="card"><div class="label">Split of ₱22,000</div>`;
+  [["Essentials","50%",11000,"--ess"],["Wealth","35%",7700,"--wealth"],["Debt","10%",2200,"--debt"],["Fun","5%",1100,"--fun"]].forEach(r=>{
+    h+=`<div class="mini"><span class="bname"><span class="dot" style="background:var(${r[3]})"></span>${r[0]} <span class="label">${r[1]}</span></span><span class="num">${peso(r[2])}</span></div>`;});
+  h+=`</section><section class="card"><div class="label">Golden rules</div>
+   <p style="margin:0"><b>Zero-debt conversion.</b> Once debt is cleared, add the ₱2,200 to savings, raising it to ₱9,900 per cut-off.</p>
+   <p style="margin:0"><b>Strict boundaries.</b> If essentials pass ₱11,000, cut subscriptions or utility use, not your 35% savings.</p></section>`;
+  return h;
+}
+function render(){
+  view.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${tab==="home"?renderHome():tab==="history"?renderHistory():tab==="savings"?renderSavings():renderPlan()}</div>`;
+  document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===tab?"page":"false"));
+}
+function go(t){tab=t;if(t==="history")viewP=viewP||periodStart(new Date());render();window.scrollTo(0,0);}
+
+let armed=null;
+view.addEventListener("click",e=>{
+  const b=e.target.closest("button");if(!b)return;
+  if(b.dataset.b){openB[b.dataset.b]=!openB[b.dataset.b];render();}
+  else if(b.dataset.go)go(b.dataset.go);
+  else if(b.id==="prevP"){viewP=shiftPeriod(viewP,-1);render();}
+  else if(b.id==="nextP"){viewP=shiftPeriod(viewP,1);render();}
+  else if(b.dataset.del){const id=b.dataset.del;
+    if(armed!==id){armed=id;document.querySelectorAll(".del").forEach(x=>{x.classList.remove("arm");x.textContent="Delete"});b.classList.add("arm");b.textContent="Tap to confirm";return;}
+    const k=pkey(viewP);S.periods[k].items=S.periods[k].items.filter(x=>x.id!==id);armed=null;savePeriod(k);render();toast("Expense deleted");}
+  else if(b.dataset.tick){const i=+b.dataset.tick,before=ticked();S.savings.ticks[i]=!S.savings.ticks[i];saveSavings();render();
+    if(before<TICKS&&ticked()===TICKS)ringAlarm();}
+  else if(b.id==="testAlarm")ringAlarm(true);
+  else if(b.id==="exportB")exportBackup();
+  else if(b.id==="importB"){const f=document.getElementById("importF");f.value="";f.click();}
+  else if(b.id==="cancelRestore"){pendingRestore=null;render();}
+  else if(b.id==="confirmRestore"){const r=pendingRestore;pendingRestore=null;
+    const old=Object.keys(S.periods);S={periods:r.periods,savings:r.savings};
+    old.filter(k=>!S.periods[k]).forEach(k=>{S.periods[k]={items:[]};});
+    Object.keys(S.periods).forEach(savePeriod);saveSavings();render();toast("Backup restored");}
+  else if(b.id==="copyBtn"){const ta=document.getElementById("copyArea");
+    const sel=()=>{ta.focus();ta.select();toast("Text selected. Tap Copy.");};
+    try{navigator.clipboard.writeText(copyText).then(()=>{markBackup();toast("Backup copied");},sel);}catch(e){sel();}}
+});
+
+/* ---------- backup to phone ---------- */
+let pendingRestore=null,copyText="";
+const LB="sahod-tracker-lastbackup";
+function lastBackup(){try{const v=+localStorage.getItem(LB);return v?new Date(v):null}catch(e){return null}}
+function markBackup(){try{localStorage.setItem(LB,String(Date.now()))}catch(e){}}
+async function exportBackup(){
+  const data=JSON.stringify({app:"sahod-tracker",version:1,saved:new Date().toISOString(),periods:S.periods,savings:S.savings});
+  const name="sahod-backup-"+iso(new Date())+".json";
+  try{const file=new File([data],name,{type:"application/json"});
+    if(navigator.canShare&&navigator.canShare({files:[file]})&&/iPhone|iPad|iPod/.test(navigator.userAgent)){
+      await navigator.share({files:[file],title:"Sahod Tracker backup"});markBackup();copyText="";render();toast("Backup saved");return;}
+  }catch(e){if(e&&e.name==="AbortError"){toast("Backup not saved");return;}}
+  try{const url=URL.createObjectURL(new Blob([data],{type:"application/json"}));const a=document.createElement("a");
+    a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+    markBackup();copyText="";render();toast("Backup saved to Downloads");return;}catch(e){}
+  copyText=data;render();
+}
+function readBackup(txt){
+  let o;try{o=JSON.parse(txt)}catch(e){return null}
+  if(!o||o.app!=="sahod-tracker"||typeof o.periods!=="object"||!o.savings)return null;
+  const periods={};Object.keys(o.periods).forEach(k=>{if(/^p-\d{4}-\d{2}-\d{2}$/.test(k)&&Array.isArray(o.periods[k].items))
+    periods[k]={items:o.periods[k].items.filter(x=>x&&x.amt>0&&x.cat&&x.date).map(x=>({id:String(x.id),amt:+x.amt,cat:String(x.cat),note:String(x.note||"").slice(0,60),date:String(x.date),t:+x.t||0}))};});
+  const ticks=Array.isArray(o.savings.ticks)&&o.savings.ticks.length===TICKS?o.savings.ticks.map(Boolean):Array(TICKS).fill(false);
+  const d=new Date(o.saved);
+  return{periods,savings:{start:/^\d{4}-\d{2}$/.test(o.savings.start)?o.savings.start:"2026-11",ticks},label:isNaN(d)?"an unknown date":MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear()};
+}
+document.getElementById("importF").addEventListener("change",e=>{
+  const f=e.target.files&&e.target.files[0];if(!f)return;
+  const rd=new FileReader();rd.onload=()=>{const r=readBackup(String(rd.result));
+    if(!r){toast("That file isn't a Sahod Tracker backup");return;}
+    pendingRestore=r;tab="plan";render();document.getElementById("backupCard").scrollIntoView({block:"center"});};
+  rd.readAsText(f);
+});
+view.addEventListener("change",e=>{if(e.target.id==="startM"){S.savings.start=e.target.value;saveSavings();render();}});
+document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>{if(b.dataset.tab==="history")viewP=periodStart(new Date());go(b.dataset.tab)}));
+
+/* ---------- add expense sheet ---------- */
+const sheet=document.getElementById("sheet"),fAmt=document.getElementById("fAmt"),fDate=document.getElementById("fDate"),fNote=document.getElementById("fNote"),fErr=document.getElementById("fErr");
+let fCat=null;
+function buildCats(){let h="";PLAN.forEach(g=>{h+=`<div><div class="label" style="margin-bottom:6px">${g.name}</div><div class="chips">`;
+  g.items.forEach(i=>h+=`<button class="chip" style="--c:var(${g.color})" data-cat="${i.id}" aria-pressed="${fCat===i.id}">${i.name}</button>`);h+=`</div></div>`;});
+  document.getElementById("fCats").innerHTML=h;}
+document.getElementById("fCats").addEventListener("click",e=>{const c=e.target.closest("[data-cat]");if(!c)return;fCat=c.dataset.cat;buildCats();});
+document.getElementById("fab").addEventListener("click",()=>{fAmt.value="";fNote.value="";fErr.textContent="";fDate.value=iso(new Date());fCat=fCat||"groc";buildCats();sheet.hidden=false;setTimeout(()=>fAmt.focus(),50);});
+document.getElementById("closeSheet").addEventListener("click",()=>sheet.hidden=true);
+sheet.addEventListener("click",e=>{if(e.target===sheet)sheet.hidden=true;});
+document.getElementById("fSave").addEventListener("click",()=>{
+  const amt=parseFloat(String(fAmt.value).replace(/[,₱\s]/g,""));
+  if(!(amt>0)){fErr.textContent="Enter an amount above ₱0.";return;}
+  if(!fCat){fErr.textContent="Pick a category.";return;}
+  if(!fDate.value){fErr.textContent="Pick a date.";return;}
+  const k=pkey(periodStart(parse(fDate.value)));S.periods[k]=S.periods[k]||{items:[]};
+  S.periods[k].items=S.periods[k].items.concat([{id:Date.now().toString(36)+Math.random().toString(36).slice(2,6),amt:Math.round(amt*100)/100,cat:fCat,note:fNote.value.trim(),date:fDate.value,t:Date.now()}]);
+  savePeriod(k);sheet.hidden=true;render();toast(peso(amt)+" added to "+ITEM[fCat].name);
+});
+
+/* ---------- alarm ---------- */
+let actx=null,beepTimer=null,stopTimer=null;
+function beep(){if(!actx)return;const t=actx.currentTime;[0,.18,.36].forEach((o,j)=>{const os=actx.createOscillator(),g=actx.createGain();
+  os.type="square";os.frequency.value=j===2?1320:988;g.gain.setValueAtTime(.0001,t+o);g.gain.exponentialRampToValueAtTime(.25,t+o+.02);g.gain.exponentialRampToValueAtTime(.0001,t+o+.15);
+  os.connect(g).connect(actx.destination);os.start(t+o);os.stop(t+o+.16);});}
+function ringAlarm(test){
+  document.getElementById("alarmText").textContent=test?"This is how the alarm sounds when you tick your 12th payday. Turn your volume up.":"You ticked all 12 paydays: "+peso(GOAL)+" saved. Your Emergency Shield is complete. Time to start Phase B: Pag-IBIG MP2, index funds and sinking funds.";
+  document.getElementById("alarm").hidden=false;
+  try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume&&actx.resume();}catch(e){}
+  beep();clearInterval(beepTimer);beepTimer=setInterval(()=>{beep();try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}},900);
+  try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}
+  clearTimeout(stopTimer);stopTimer=setTimeout(stopAlarm,test?6000:60000);
+}
+function stopAlarm(){clearInterval(beepTimer);clearTimeout(stopTimer);document.getElementById("alarm").hidden=true;try{navigator.vibrate&&navigator.vibrate(0)}catch(e){}}
+document.getElementById("stopAlarm").addEventListener("click",stopAlarm);
+
+let tt=null;function toast(m){const t=document.getElementById("toast");t.textContent=m;t.hidden=false;clearTimeout(tt);tt=setTimeout(()=>t.hidden=true,2200);}
+
+render();
+if("serviceWorker" in navigator&&location.protocol.startsWith("http")){navigator.serviceWorker.register("sw.js").catch(()=>{});}
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist();}catch(e){}
+</script>
+
+</body>
+</html>
