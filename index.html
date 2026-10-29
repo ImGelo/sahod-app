@@ -156,7 +156,7 @@ select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px 
 
 <div class="app" id="app">
   <header class="top">
-    <div class="brand"><div class="mark">₱</div><div><h1>Sahod Tracker</h1><div class="label">₱22,000 per cut-off</div></div></div>
+    <div class="brand"><div class="mark">₱</div><div><h1>Sahod Tracker</h1><div class="label" id="salLbl">₱22,000 per cut-off</div></div></div>
     <div class="sync on" id="sync"><i></i><span>Saved on this phone</span></div>
   </header>
   <main id="view"></main>
@@ -193,23 +193,36 @@ select,input{font:inherit;color:var(--ink);background:var(--surface);border:1px 
 
 <script>
 const PLAN=[
- {id:"ess",name:"Essentials",pct:"50%",budget:11000,color:"--ess",items:[
+ {id:"ess",name:"Essentials",pct:"50%",share:.5,budget:11000,color:"--ess",items:[
   {id:"rent",name:"Housing & Rent",b:3500,s:"Rent, condo dues, maintenance"},
   {id:"util",name:"Utilities & Internet",b:1500,s:"Meralco, water, fiber, mobile plan"},
   {id:"groc",name:"Groceries & Home",b:3500,s:"Food stocks, toiletries, household"},
   {id:"trans",name:"Transportation / Fuel",b:1500,s:"Fares, gas, Beep / AutoSweep"},
   {id:"daily",name:"Daily Work Allowance",b:1000,s:"On-the-go meals, transit cash"}]},
- {id:"debt",name:"Debt",pct:"10%",budget:2200,color:"--debt",items:[
+ {id:"debt",name:"Debt",pct:"10%",share:.1,budget:2200,color:"--debt",items:[
   {id:"cc",name:"Credit Cards / BNPL",b:1500,s:"SPayLater, LazPayLater, CC bill"},
   {id:"loan",name:"Personal / Informal Loans",b:700,s:"SSS / Pag-IBIG loans, personal debts"}]},
- {id:"fun",name:"Guilt-Free Fun",pct:"5%",budget:1100,color:"--fun",items:[
+ {id:"fun",name:"Guilt-Free Fun",pct:"5%",share:.05,budget:1100,color:"--fun",items:[
   {id:"dine",name:"Dining Out & Cafes",b:500,s:"Coffee, food delivery, eating out"},
   {id:"subs",name:"Subscriptions & Leisure",b:300,s:"Netflix, Spotify, movies"},
   {id:"treat",name:"Personal Rewards",b:300,s:"Splurges, hobby gear"}]}
 ];
 const ITEM={};PLAN.forEach(g=>g.items.forEach(i=>ITEM[i.id]={...i,group:g}));
-const SPENDABLE=PLAN.reduce((a,g)=>a+g.budget,0); // 14,300
-const SAVE_PER=7700, TICKS=12, GOAL=SAVE_PER*TICKS;
+const BASE=22000, TICKS=12;
+/* salary: same 50/35/10/5 split, scaled from the original blueprint */
+function salaryAt(d){const k=iso(periodStart(d));let a=BASE;(S.salary||[]).forEach(x=>{if(x.from<=k)a=x.amt;});return a;}
+const gBudget=(g,d)=>Math.round(salaryAt(d)*g.share);
+const iBudget=(i,d)=>Math.round(i.b*salaryAt(d)/BASE);
+const baseSpend=d=>PLAN.reduce((a,g)=>a+gBudget(g,d),0);
+const wealthAt=d=>salaryAt(d)-baseSpend(d);
+/* leftovers: what was unspent last cut-off and where it went */
+const LO_TO={emergency:"Emergency Shield",sinking:"Sinking Funds",debt:"Extra debt payment",rollover:"Rolled over to Fun"};
+function normLeft(m){const out={};if(m&&typeof m==="object")Object.keys(m).forEach(k=>{if(!/^p-\d{4}-\d{2}-\d{2}$/.test(k)||!m[k])return;const r={};
+  ["ess","debt","fun"].forEach(g=>{const x=m[k][g];if(x&&+x.amt>=0&&LO_TO[x.to])r[g]={amt:Math.round(+x.amt*100)/100,to:x.to};});if(Object.keys(r).length)out[k]=r;});return out;}
+function rollIn(d){const k=pkey(shiftPeriod(periodStart(d),-1)),x=(S.leftover[k]||{}).fun;return x&&x.to==="rollover"?x.amt:0;}
+const budgetFor=(g,d)=>gBudget(g,d)+(g.id==="fun"?rollIn(d):0);
+const spendable=d=>baseSpend(d)+rollIn(d);
+function loSum(to){let a=0;Object.values(S.leftover).forEach(r=>Object.values(r).forEach(x=>{if(to.includes(x.to))a+=x.amt;}));return a;}
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const MONL=["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -232,21 +245,26 @@ const B_FUNDS=[
  {id:"mp2",name:"Pag-IBIG MP2",short:"MP2",amt:3500,color:"--ess",s:"Tax-free, 5-year lock-in"},
  {id:"etf",name:"Index Funds / ETFs",short:"ETF",amt:2200,color:"--fun",s:"FMETF, Gotrade or equity UITFs"},
  {id:"sink",name:"Sinking Funds",short:"Sinking",amt:2000,color:"--debt",s:"Annual fees, medical, gadgets, travel"}];
-const B_PER=B_FUNDS.reduce((a,f)=>a+f.amt,0);
+function fundAmt(id,d){const w=wealthAt(d),m=Math.round(w*3500/7700),e=Math.round(w*2200/7700);return id==="mp2"?m:id==="etf"?e:w-m-e;}
+function normSal(l){return Array.isArray(l)?l.filter(x=>x&&/^\d{4}-\d{2}-\d{2}$/.test(x.from)&&+x.amt>=1000).map(x=>({from:x.from,amt:Math.round(+x.amt)})).sort((a,b)=>a.from.localeCompare(b.from)):[];}
 const SINK_FOR=["Annual fees","Medical","Gadgets","Travel","Insurance","Other"];
 function normB(b){b=b&&typeof b==="object"?b:{};const paid={};
   if(b.paid&&typeof b.paid==="object")Object.keys(b.paid).forEach(k=>{if(/^\d{4}-\d{2}-\d{2}$/.test(k)&&b.paid[k]){const r={};B_FUNDS.forEach(f=>{if(b.paid[k][f.id])r[f.id]=true});paid[k]=r;}});
   return{paid,mp2Rate:+b.mp2Rate>0&&+b.mp2Rate<30?+b.mp2Rate:7,etfValue:b.etfValue==null||isNaN(+b.etfValue)?null:+b.etfValue,etfValueDate:typeof b.etfValueDate==="string"?b.etfValueDate:null,
     sinkUses:Array.isArray(b.sinkUses)?b.sinkUses.filter(x=>x&&+x.amt>0).map(x=>({id:String(x.id),amt:+x.amt,purpose:String(x.purpose||"Other").slice(0,30),note:String(x.note||"").slice(0,60),date:String(x.date||"")})):[]};}
-let S={periods:{},savings:{start:"2026-11",ticks:Array(TICKS).fill(false)},phaseB:normB(null)};
+let S={periods:{},savings:{start:"2026-11",ticks:Array(TICKS).fill(false)},phaseB:normB(null),salary:[],leftover:{}};
 try{const c=JSON.parse(localStorage.getItem(LS)||"null");if(c&&c.periods)S=c;}catch(e){}
 if(!Array.isArray(S.savings.ticks)||S.savings.ticks.length!==TICKS)S.savings.ticks=Array(TICKS).fill(false);
 S.phaseB=normB(S.phaseB);
+S.salary=normSal(S.salary);
+S.leftover=normLeft(S.leftover);
 const cache=()=>{try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}};
 function persist(){cache();}
 const savePeriod=k=>persist(k,{items:(S.periods[k]||{items:[]}).items});
 const saveSavings=()=>persist("savings",{start:S.savings.start,ticks:S.savings.ticks});
 const savePhaseB=()=>persist("phaseb",JSON.parse(JSON.stringify(S.phaseB)));
+const saveSalary=()=>persist("salary",{list:S.salary});
+const saveLeftover=()=>persist("leftover",{map:S.leftover});
 
 
 /* ---------- UI ---------- */
@@ -258,33 +276,57 @@ const ticked=()=>S.savings.ticks.filter(Boolean).length;
 
 function renderHome(){
   const cur=periodStart(new Date()),k=pkey(cur),sp=spentIn(k);
-  const left=SPENDABLE-sp.tot,pct=Math.min(100,sp.tot/SPENDABLE*100);
+  const SP=spendable(cur),left=SP-sp.tot,pct=Math.min(100,sp.tot/SP*100);
   const today=new Date(),end=periodEnd(cur),daysLeft=Math.round((end-new Date(today.getFullYear(),today.getMonth(),today.getDate()))/864e5)+1;
   let h=`<section class="hero"><div class="label">This cut-off · ${fmtRange(cur)}</div>
    <div><div class="big num">${peso(Math.max(left,0))}</div><div style="font-size:13px;opacity:.85;margin-top:4px">${left>=0?"left to spend":"over budget by "+peso(-left)}</div></div>
    <div class="meter"><b style="width:${pct}%"></b></div>
-   <div class="row"><span>Spent <span class="num">${peso(sp.tot)}</span> of <span class="num">${peso(SPENDABLE)}</span></span><span>${daysLeft} day${daysLeft===1?"":"s"} to next payday</span></div></section>`;
-  PLAN.forEach(g=>{let gs=0;g.items.forEach(i=>gs+=sp.by[i.id]||0);const gl=g.budget-gs;
+   <div class="row"><span>Spent <span class="num">${peso(sp.tot)}</span> of <span class="num">${peso(SP)}</span></span><span>${daysLeft} day${daysLeft===1?"":"s"} to next payday</span></div></section>`+renderLeftover();
+  PLAN.forEach(g=>{let gs=0;g.items.forEach(i=>gs+=sp.by[i.id]||0);const gb=budgetFor(g,cur),gl=gb-gs;
     h+=`<section class="bucket"><button data-b="${g.id}" aria-expanded="${!!openB[g.id]}">
      <div class="bhead"><span class="bname"><span class="dot" style="background:var(${g.color})"></span>${g.name} <span class="label">${g.pct}</span></span>
-     <span class="num">${peso(gs)} <span style="color:var(--muted)">/ ${peso(g.budget)}</span></span></div>
-     <div class="bar"><b style="width:${Math.min(100,gs/g.budget*100)}%;background:${gl<0?"var(--danger)":"var("+g.color+")"}"></b></div>
-     <div class="bleft ${gl<0?"over":""}">${gl<0?"Over by "+peso(-gl):peso(gl)+" left"}</div></button>`;
+     <span class="num">${peso(gs)} <span style="color:var(--muted)">/ ${peso(gb)}</span></span></div>
+     <div class="bar"><b style="width:${Math.min(100,gs/gb*100)}%;background:${gl<0?"var(--danger)":"var("+g.color+")"}"></b></div>
+     <div class="bleft ${gl<0?"over":""}">${gl<0?"Over by "+peso(-gl):peso(gl)+" left"}${g.id==="fun"&&rollIn(cur)?" · includes "+peso(rollIn(cur))+" rolled over":""}</div></button>`;
     if(openB[g.id]){h+=`<div class="lines">`;g.items.forEach(i=>{const s=sp.by[i.id]||0;
-      h+=`<div class="line"><span>${i.name}</span><span class="num" style="${s>i.b?"color:var(--danger)":""}">${peso(s)} / ${peso(i.b)}</span><span class="s">${i.s}</span></div>`});h+=`</div>`;}
+      const ib=iBudget(i,cur);h+=`<div class="line"><span>${i.name}</span><span class="num" style="${s>ib?"color:var(--danger)":""}">${peso(s)} / ${peso(ib)}</span><span class="s">${i.s}</span></div>`});h+=`</div>`;}
     h+=`</section>`;});
   const t=ticked(),lb=lastBackup(),hasData=Object.keys(S.periods).length||t;
   if(hasData&&(!lb||Date.now()-lb>14*864e5))h+=`<section class="card mini" style="border-color:var(--warn)"><div style="font-size:14px"><b>${lb?"Backup is over 2 weeks old.":"No backup yet."}</b> Save a copy to your phone so you never lose your data.</div><button class="link" data-go="plan">Back up</button></section>`;
   if(bActive()){const T=bTotals(),ck=iso(bPaydays()[0]),n=B_FUNDS.filter(f=>(S.phaseB.paid[ck]||{})[f.id]).length;
     return h+`<section class="card"><div class="mini"><div><div class="label">Phase B · Wealth Expansion</div><div style="font-weight:700"><span class="num">${peso(T.value)}</span> · this payday ${n} of 3 done</div></div><button class="link" data-go="savings">Open</button></div></section>`;}
-  h+=`<section class="card"><div class="mini"><div><div class="label">Emergency Shield</div><div style="font-weight:700">${t} of 12 paydays saved · <span class="num">${peso(t*SAVE_PER)}</span></div></div><button class="link" data-go="savings">Open</button></div>
+  h+=`<section class="card"><div class="mini"><div><div class="label">Emergency Shield</div><div style="font-weight:700">${t} of 12 paydays saved · <span class="num">${peso(savedA()+loSum(["emergency"]))}</span></div></div><button class="link" data-go="savings">Open</button></div>
    <div class="track"><b style="width:${t/TICKS*100}%"></b><span></span></div></section>`;
   return h;
+}
+function lastLeft(){const prev=shiftPeriod(periodStart(new Date()),-1),k=pkey(prev),sp=spentIn(k);
+  if(!sp.items.length)return null;const left={};
+  PLAN.forEach(g=>{let gs=0;g.items.forEach(i=>gs+=sp.by[i.id]||0);left[g.id]=Math.max(0,Math.round((budgetFor(g,prev)-gs)*100)/100);});
+  return{prev,k,left,total:left.ess+left.debt+left.fun};}
+function renderLeftover(){
+  const L=lastLeft();if(!L||L.total<=0)return"";
+  const rec=S.leftover[L.k]||{},saveTo=bActive()?"sinking":"emergency";
+  const rows=[["ess","Essentials","--ess"],["debt","Debt","--debt"],["fun","Fun","--fun"]].filter(r=>L.left[r[0]]>0||rec[r[0]]);
+  const pending=rows.filter(r=>!rec[r[0]]).length;
+  let h=`<section class="card"><div class="mini"><div><div class="label">Last cut-off leftover · ${fmtRange(L.prev)}</div>
+   <div style="font-weight:700"><span class="num">${peso(L.total)}</span> unspent${pending?"":" · all handled ✓"}</div></div></div>`;
+  rows.forEach(([id,name,col])=>{const r=rec[id],amt=r?r.amt:L.left[id];
+    let tip,btns;
+    if(r){tip=`<span style="color:var(--ok);font-weight:600">✓ ${LO_TO[r.to]}</span>`;btns=`<button class="link" data-loundo="${L.k}|${id}" style="font-size:13px">Undo</button>`;}
+    else if(id==="ess"){tip=`Suggested: move to your ${LO_TO[saveTo]}`;btns=`<button class="ghost" data-lo="${L.k}|ess|${saveTo}|${amt}">Done, I moved it</button>`;}
+    else if(id==="debt"){tip="Suggested: pay it as an extra debt payment";btns=`<button class="ghost" data-lo="${L.k}|debt|debt|${amt}">Done, I paid it</button>`;}
+    else{tip="Your choice: keep it for fun, or save it";btns=`<button class="ghost" data-lo="${L.k}|fun|rollover|${amt}">Roll over to Fun</button><button class="ghost" data-lo="${L.k}|fun|${saveTo}|${amt}">Move to savings</button>`;}
+    h+=`<div style="border-top:1px dashed var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px">
+     <div class="mini"><span class="bname"><span class="dot" style="background:var(${col})"></span>${name}</span><span class="num" style="font-weight:700">${peso(amt)}</span></div>
+     <div style="font-size:13px;color:var(--muted)">${tip}</div><div style="display:flex;gap:8px;flex-wrap:wrap">${btns}</div></div>`;});
+  const ex=loSum(["emergency","sinking"]);
+  if(ex)h+=`<div style="font-size:13px;color:var(--muted)">Extra saved from leftovers so far: <b class="num" style="color:var(--ok)">${peso(ex)}</b></div>`;
+  return h+`</section>`;
 }
 function renderHistory(){
   const k=pkey(viewP),sp=spentIn(k),isCur=k===pkey(periodStart(new Date()));
   let h=`<div class="pnav"><button id="prevP" aria-label="Previous cut-off">‹</button><div><div class="label">${isCur?"This cut-off":"Cut-off"}</div><h2 style="font-size:18px">${fmtRange(viewP)}</h2></div><button id="nextP" aria-label="Next cut-off" ${isCur?"disabled":""}>›</button></div>
-   <div class="card mini"><span>Total spent</span><span class="num" style="font-weight:700">${peso(sp.tot)} / ${peso(SPENDABLE)}</span></div>`;
+   <div class="card mini"><span>Total spent</span><span class="num" style="font-weight:700">${peso(sp.tot)} / ${peso(spendable(viewP))}</span></div>`;
   if(!sp.items.length)return h+`<div class="empty">No expenses logged for this cut-off.<br>Tap <b>+</b> to add one.</div>`;
   const items=sp.items.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.t-a.t);let last="";
   items.forEach(x=>{const it=ITEM[x.cat]||{name:x.cat,group:{color:"--muted"}};
@@ -292,6 +334,10 @@ function renderHistory(){
     h+=`<div class="tx"><span class="dot" style="background:var(${it.group.color})"></span><div class="t"><div>${esc(x.note||it.name)}</div><div>${x.note?esc(it.name):esc(it.group.name||"")}</div></div><span class="num" style="font-weight:700">${peso(x.amt)}</span><button class="del" data-del="${x.id}" aria-label="Delete">Delete</button></div>`;});
   return h;
 }
+function tickDate(i){const[y,m]=S.savings.start.split("-").map(Number);return new Date(y,(m-1)+Math.floor(i/2),i%2?25:10);}
+const tickAmt=i=>wealthAt(tickDate(i));
+function goalA(n){let a=0;for(let i=0;i<(n||TICKS);i++)a+=tickAmt(i);return a;}
+function savedA(){let a=0;S.savings.ticks.forEach((on,i)=>{if(on)a+=tickAmt(i)});return a;}
 function tickLabel(i){const [y,m]=S.savings.start.split("-").map(Number);const mi=(m-1)+Math.floor(i/2);
   const d=new Date(y,mi,i%2?25:10);return{month:MONL[d.getMonth()]+" "+d.getFullYear(),day:MON[d.getMonth()]+" "+d.getDate()};}
 const bActive=()=>ticked()===TICKS||Object.keys(S.phaseB.paid).length>0;
@@ -299,12 +345,12 @@ function bStart(){const[y,m]=S.savings.start.split("-").map(Number);return new D
 function bPaydays(){const out=[];let p=bStart();const cur=periodStart(new Date());const last=cur>p?cur:p;let g=0;
   while(p<=last&&g<500){out.push(p);p=shiftPeriod(p,1);g++;}return out.reverse();}
 function bTotals(){const B=S.phaseB,c={mp2:0,etf:0,sink:0};let first=null,mp2Div=0;const now=Date.now();
-  Object.keys(B.paid).forEach(k=>{B_FUNDS.forEach(f=>{if(B.paid[k][f.id]){c[f.id]+=f.amt;
-    if(f.id==="mp2"){if(!first||k<first)first=k;const yrs=Math.max(0,(now-parse(k))/(365.25*864e5));mp2Div+=f.amt*(Math.pow(1+B.mp2Rate/100,yrs)-1);}}})});
-  const used=B.sinkUses.reduce((a,x)=>a+x.amt,0);
+  Object.keys(B.paid).forEach(k=>{B_FUNDS.forEach(f=>{if(B.paid[k][f.id]){const fa=fundAmt(f.id,parse(k));c[f.id]+=fa;
+    if(f.id==="mp2"){if(!first||k<first)first=k;const yrs=Math.max(0,(now-parse(k))/(365.25*864e5));mp2Div+=fa*(Math.pow(1+B.mp2Rate/100,yrs)-1);}}})});
+  const used=B.sinkUses.reduce((a,x)=>a+x.amt,0);c.sinkX=loSum(["sinking"]);
   const etfNow=B.etfValue==null?c.etf:B.etfValue;
-  const contributed=c.mp2+c.etf+c.sink;
-  const value=c.mp2+mp2Div+etfNow+(c.sink-used);
+  const contributed=c.mp2+c.etf+c.sink+c.sinkX;
+  const value=c.mp2+mp2Div+etfNow+(c.sink+c.sinkX-used);
   return{c,mp2Div,first,used,etfNow,contributed,value,growth:mp2Div+(etfNow-c.etf)};}
 const dLabel=d=>MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear();
 let sinkArm=null;
@@ -316,9 +362,9 @@ function renderPhaseB(){
   let h=`<section class="hero" style="background:var(--wealth)"><div class="label">Phase B · Wealth Expansion</div>
    <div><div class="big num">${peso(T.value)}</div><div style="font-size:13px;opacity:.85;margin-top:4px">total value across MP2, ETFs and sinking funds</div></div>
    <div class="row"><span>Put in <span class="num">${peso(T.contributed)}</span></span><span>Growth <span class="num">${g>=0?"+":"−"}${peso(Math.abs(g))}</span></span></div></section>
-  <section class="card"><div class="mini"><div><div class="label">${isNow?"This payday":"First Phase B payday"}</div><h3 style="font-size:17px">${MON[cur.getMonth()]} ${cur.getDate()} · ${doneNow} of 3 done</h3></div><span class="num" style="color:var(--muted)">${peso(B_PER)}</span></div>`;
+  <section class="card"><div class="mini"><div><div class="label">${isNow?"This payday":"First Phase B payday"}</div><h3 style="font-size:17px">${MON[cur.getMonth()]} ${cur.getDate()} · ${doneNow} of 3 done</h3></div><span class="num" style="color:var(--muted)">${peso(wealthAt(cur))}</span></div>`;
   B_FUNDS.forEach(f=>{const on=!!cp[f.id];
-    h+=`<button class="tick ${on?"on":""}" data-btick="${ck}|${f.id}" aria-pressed="${on}"><span class="box">✓</span><span style="flex:1"><b>${f.name}</b><small>${f.s}</small></span><span class="num">${peso(f.amt)}</span></button>`;});
+    h+=`<button class="tick ${on?"on":""}" data-btick="${ck}|${f.id}" aria-pressed="${on}"><span class="box">✓</span><span style="flex:1"><b>${f.name}</b><small>${f.s}</small></span><span class="num">${peso(fundAmt(f.id,cur))}</span></button>`;});
   h+=`</section>`;
   // MP2
   const mat=T.first?parse(T.first):null;if(mat)mat.setFullYear(mat.getFullYear()+5);
@@ -335,9 +381,9 @@ function renderPhaseB(){
    <div style="display:flex;gap:8px"><input id="etfVal" inputmode="decimal" placeholder="${T.c.etf||"0"}" value="${B.etfValue==null?"":B.etfValue}" style="flex:1;min-width:0"><button class="ghost" id="etfSave">Update</button></div></div>
    <div style="font-size:12px;color:var(--muted)">${B.etfValueDate?"Value last updated "+dLabel(parse(B.etfValueDate)):"Not updated yet, so showing what you put in."}</div></section>`;
   // Sinking
-  const bal=T.c.sink-T.used;
+  const bal=T.c.sink+T.c.sinkX-T.used;
   h+=`<section class="card"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--debt)"></span>Sinking Funds</span><span class="num" style="font-weight:700;${bal<0?"color:var(--danger)":""}">${peso(bal)}</span></div>
-   <div class="line" style="border:0;padding:0"><span>Saved</span><span class="num">${peso(T.c.sink)}</span><span>Used</span><span class="num">${peso(T.used)}</span></div>
+   <div class="line" style="border:0;padding:0"><span>Saved</span><span class="num">${peso(T.c.sink+T.c.sinkX)}${T.c.sinkX?` <small style="color:var(--ok)">(${peso(T.c.sinkX)} from leftovers)</small>`:""}</span><span>Used</span><span class="num">${peso(T.used)}</span></div>
    <div class="two"><div class="field"><label class="label" for="sinkAmt">Use amount</label><input id="sinkAmt" inputmode="decimal" placeholder="₱0"></div>
    <div class="field"><label class="label" for="sinkFor">For</label><select id="sinkFor">${SINK_FOR.map(x=>`<option>${x}</option>`).join("")}</select></div></div>
    <input id="sinkNote" placeholder="Note, e.g. phone repair" maxlength="60" aria-label="Note">
@@ -355,20 +401,20 @@ function renderPhaseB(){
 function renderSavings(){
   if(!bActive())return renderPhaseA();
   const t=ticked();
-  return renderPhaseB()+`<section class="bucket"><button data-b="phaseA" aria-expanded="${!!openB.phaseA}"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--wealth)"></span>Phase A · Emergency Shield</span><span class="num">${peso(t*SAVE_PER)}</span></div><div class="bleft">${t===TICKS?"Complete · 6 months saved":t+" of 12 paydays"} · ${openB.phaseA?"Hide":"Show"} checklist</div></button></section>`+(openB.phaseA?renderPhaseA():"");
+  return renderPhaseB()+`<section class="bucket"><button data-b="phaseA" aria-expanded="${!!openB.phaseA}"><div class="bhead"><span class="bname"><span class="dot" style="background:var(--wealth)"></span>Phase A · Emergency Shield</span><span class="num">${peso(savedA()+loSum(["emergency"]))}</span></div><div class="bleft">${t===TICKS?"Complete · 6 months saved":t+" of 12 paydays"} · ${openB.phaseA?"Hide":"Show"} checklist</div></button></section>`+(openB.phaseA?renderPhaseA():"");
 }
 function renderPhaseA(){
   const t=ticked();
   let opts="";const now=new Date();for(let k=-12;k<=6;k++){const d=new Date(now.getFullYear(),now.getMonth()+k,1);const v=d.getFullYear()+"-"+pad(d.getMonth()+1);opts+=`<option value="${v}" ${v===S.savings.start?"selected":""}>${MONL[d.getMonth()]} ${d.getFullYear()}</option>`;}
   let h=`<section class="card goal"><div class="label">Phase A · Emergency Shield</div>
-   <div class="goalnum"><span class="big num">${peso(t*SAVE_PER)}</span><span style="color:var(--muted)">of <span class="num">${peso(GOAL)}</span> · 6 months</span></div>
+   <div class="goalnum"><span class="big num">${peso(savedA()+loSum(["emergency"]))}</span><span style="color:var(--muted)">of <span class="num">${peso(goalA())}</span> · 6 months</span></div>${loSum(["emergency"])?`<div style="font-size:13px;color:var(--ok);font-weight:600">Includes ${peso(loSum(["emergency"]))} extra from leftovers</div>`:""}
    <div class="track"><b style="width:${t/TICKS*100}%"></b><span title="3 months"></span></div>
-   <div class="marks"><span>Start</span><span>3 months · ${peso(GOAL/2)}</span><span>6 months</span></div>
-   <div style="font-size:13px;color:var(--muted)">Tick a payday once you've moved ₱7,700 to your digital bank savings. When all 12 are ticked, the alarm rings.</div></section>`;
+   <div class="marks"><span>Start</span><span>3 months · ${peso(goalA(6))}</span><span>6 months</span></div>
+   <div style="font-size:13px;color:var(--muted)">Tick a payday once you've moved that payday's amount (35% of your salary) to your digital bank savings. When all 12 are ticked, the alarm rings.</div></section>`;
   h+=`<div class="field"><label class="label" for="startM">First saving month</label><select id="startM">${opts}</select></div><div class="months">`;
   for(let m=0;m<6;m++){const a=tickLabel(m*2);h+=`<div class="month"><h3>Month ${m+1}</h3><div class="label">${a.month}</div>`;
     for(const i of [m*2,m*2+1]){const on=S.savings.ticks[i],L=tickLabel(i);
-      h+=`<button class="tick ${on?"on":""}" data-tick="${i}" aria-pressed="${on}"><span class="box">✓</span><span><span class="num">${peso(SAVE_PER)}</span><small>Payday ${L.day}</small></span></button>`;}
+      h+=`<button class="tick ${on?"on":""}" data-tick="${i}" aria-pressed="${on}"><span class="box">✓</span><span><span class="num">${peso(tickAmt(i))}</span><small>Payday ${L.day}</small></span></button>`;}
     h+=`</div>`;}
   h+=`</div><button class="ghost" id="testAlarm">Test the alarm sound</button>`;
   return h;
@@ -387,22 +433,39 @@ function renderBackup(){
    <button class="ghost" id="copyBtn">Copy backup text</button></div>`;
   return h+`<div class="err" id="bErr"></div></section>`;
 }
+let salMsg="";
+function renderSalary(){
+  const cur=periodStart(new Date()),nx=shiftPeriod(cur,1),sal=salaryAt(cur),nsal=salaryAt(nx);
+  let h=`<section class="card" id="salCard"><div class="label">Salary per cut-off</div>
+   <div class="goalnum"><span class="big num" style="font-family:var(--display);font-weight:800;font-size:30px">${peso(sal)}</span><span style="color:var(--muted)">this cut-off</span></div>
+   ${nsal!==sal?`<div style="font-size:13px;font-weight:600;color:var(--ok)">Changes to ${peso(nsal)} on ${MON[nx.getMonth()]} ${nx.getDate()}</div>`:""}
+   <div style="font-size:13px;color:var(--muted)">Got a raise or a change in pay? Enter it here. Every budget, savings and Phase B amount adjusts using the same 50 / 35 / 10 / 5 split. Past cut-offs keep the salary they had.</div>
+   <div class="two"><div class="field"><label class="label" for="salAmt">New salary</label><input id="salAmt" inputmode="decimal" placeholder="${sal}"></div>
+   <div class="field"><label class="label" for="salFrom">Starting</label><select id="salFrom"><option value="${iso(cur)}">This cut-off (${MON[cur.getMonth()]} ${cur.getDate()})</option><option value="${iso(nx)}">Next cut-off (${MON[nx.getMonth()]} ${nx.getDate()})</option></select></div></div>
+   <button class="primary" id="salSave">Update salary</button><div class="err" id="salErr">${salMsg}</div>`;
+  if(S.salary.length){h+=`<div class="label">Salary history</div>`;
+    S.salary.slice().reverse().forEach(x=>{const d=parse(x.from);h+=`<div class="mini" style="font-size:14px"><span>From ${dLabel(d)}</span><span class="num">${peso(x.amt)}</span></div>`;});
+    h+=`<div class="mini" style="font-size:14px;color:var(--muted)"><span>Before that</span><span class="num">${peso(BASE)}</span></div>`;}
+  return h+`</section>`;
+}
 function renderPlan(){
-  let h=renderBackup()+`<section class="card"><div class="label">Payday routine · 10th &amp; 25th</div>
+  const cur=periodStart(new Date()),sal=salaryAt(cur),W=wealthAt(cur),G={};PLAN.forEach(g=>G[g.id]=gBudget(g,cur));
+  let h=renderSalary()+renderBackup()+`<section class="card"><div class="label">Payday routine · 10th &amp; 25th</div>
    <ol style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px">
-   <li><b>Pay yourself first:</b> move ₱7,700 to digital bank savings.</li>
-   <li><b>Settle debt:</b> send ₱2,200 to cards or loans.</li>
-   <li><b>Keep essentials:</b> leave ₱11,000 for bills, rent, groceries.</li>
-   <li><b>Fun money:</b> move ₱1,100 to GCash / Maya.</li></ol></section>
-   <section class="card"><div class="label">Split of ₱22,000</div>`;
-  [["Essentials","50%",11000,"--ess"],["Wealth","35%",7700,"--wealth"],["Debt","10%",2200,"--debt"],["Fun","5%",1100,"--fun"]].forEach(r=>{
+   <li><b>Pay yourself first:</b> move ${peso(W)} to digital bank savings.</li>
+   <li><b>Settle debt:</b> send ${peso(G.debt)} to cards or loans.</li>
+   <li><b>Keep essentials:</b> leave ${peso(G.ess)} for bills, rent, groceries.</li>
+   <li><b>Fun money:</b> move ${peso(G.fun)} to GCash / Maya.</li></ol></section>
+   <section class="card"><div class="label">Split of ${peso(sal)}</div>`;
+  [["Essentials","50%",G.ess,"--ess"],["Wealth","35%",W,"--wealth"],["Debt","10%",G.debt,"--debt"],["Fun","5%",G.fun,"--fun"]].forEach(r=>{
     h+=`<div class="mini"><span class="bname"><span class="dot" style="background:var(${r[3]})"></span>${r[0]} <span class="label">${r[1]}</span></span><span class="num">${peso(r[2])}</span></div>`;});
   h+=`</section><section class="card"><div class="label">Golden rules</div>
-   <p style="margin:0"><b>Zero-debt conversion.</b> Once debt is cleared, add the ₱2,200 to savings, raising it to ₱9,900 per cut-off.</p>
-   <p style="margin:0"><b>Strict boundaries.</b> If essentials pass ₱11,000, cut subscriptions or utility use, not your 35% savings.</p></section>`;
+   <p style="margin:0"><b>Zero-debt conversion.</b> Once debt is cleared, add the ${peso(G.debt)} to savings, raising it to ${peso(W+G.debt)} per cut-off.</p>
+   <p style="margin:0"><b>Strict boundaries.</b> If essentials pass ${peso(G.ess)}, cut subscriptions or utility use, not your 35% savings.</p></section>`;
   return h;
 }
 function render(){
+  document.getElementById("salLbl").textContent=peso(salaryAt(new Date()))+" per cut-off";
   view.innerHTML=`<div style="display:flex;flex-direction:column;gap:12px">${tab==="home"?renderHome():tab==="history"?renderHistory():tab==="savings"?renderSavings():renderPlan()}</div>`;
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-current",b.dataset.tab===tab?"page":"false"));
 }
@@ -422,6 +485,13 @@ view.addEventListener("click",e=>{
     if(before<TICKS&&ticked()===TICKS){openB.phaseA=false;render();window.scrollTo(0,0);ringAlarm();}else render();}
   else if(b.dataset.btick){const[k,f]=b.dataset.btick.split("|");const P=S.phaseB.paid;P[k]=Object.assign({},P[k]);
     if(P[k][f])delete P[k][f];else P[k][f]=true;if(!Object.keys(P[k]).length)delete P[k];savePhaseB();render();}
+  else if(b.dataset.lo){const[k,g,to,amt]=b.dataset.lo.split("|");S.leftover[k]=Object.assign({},S.leftover[k],{[g]:{amt:+amt,to}});saveLeftover();render();
+    toast(to==="rollover"?peso(+amt)+" added to this cut-off's Fun":peso(+amt)+" → "+LO_TO[to]);}
+  else if(b.dataset.loundo){const[k,g]=b.dataset.loundo.split("|");if(S.leftover[k]){S.leftover[k]=Object.assign({},S.leftover[k]);delete S.leftover[k][g];if(!Object.keys(S.leftover[k]).length)delete S.leftover[k];}saveLeftover();render();}
+  else if(b.id==="salSave"){const n=parseFloat(document.getElementById("salAmt").value.replace(/[,₱\s]/g,""));
+    if(!(n>=1000)){salMsg="Enter your salary per cut-off, for example 25000.";render();return;}
+    const from=document.getElementById("salFrom").value;salMsg="";
+    S.salary=normSal(S.salary.filter(x=>x.from<from).concat([{from,amt:n}]));saveSalary();render();toast("Salary updated to "+peso(n));}
   else if(b.id==="etfSave"){const v=document.getElementById("etfVal").value.trim();
     if(v===""){S.phaseB.etfValue=null;S.phaseB.etfValueDate=null;}else{const n=parseFloat(v.replace(/[,₱\s]/g,""));if(!(n>=0)){toast("Enter the value in pesos");return;}S.phaseB.etfValue=Math.round(n*100)/100;S.phaseB.etfValueDate=iso(new Date());}
     savePhaseB();render();toast("ETF value updated");}
@@ -435,9 +505,9 @@ view.addEventListener("click",e=>{
   else if(b.id==="importB"){const f=document.getElementById("importF");f.value="";f.click();}
   else if(b.id==="cancelRestore"){pendingRestore=null;render();}
   else if(b.id==="confirmRestore"){const r=pendingRestore;pendingRestore=null;
-    const old=Object.keys(S.periods);S={periods:r.periods,savings:r.savings,phaseB:r.phaseB};
+    const old=Object.keys(S.periods);S={periods:r.periods,savings:r.savings,phaseB:r.phaseB,salary:r.salary,leftover:r.leftover};
     old.filter(k=>!S.periods[k]).forEach(k=>{S.periods[k]={items:[]};});
-    Object.keys(S.periods).forEach(savePeriod);saveSavings();savePhaseB();render();toast("Backup restored");}
+    Object.keys(S.periods).forEach(savePeriod);saveSavings();savePhaseB();saveSalary();saveLeftover();render();toast("Backup restored");}
   else if(b.id==="copyBtn"){const ta=document.getElementById("copyArea");
     const sel=()=>{ta.focus();ta.select();toast("Text selected. Tap Copy.");};
     try{navigator.clipboard.writeText(copyText).then(()=>{markBackup();toast("Backup copied");},sel);}catch(e){sel();}}
@@ -449,7 +519,7 @@ const LB="sahod-tracker-lastbackup";
 function lastBackup(){try{const v=+localStorage.getItem(LB);return v?new Date(v):null}catch(e){return null}}
 function markBackup(){try{localStorage.setItem(LB,String(Date.now()))}catch(e){}}
 async function exportBackup(){
-  const data=JSON.stringify({app:"sahod-tracker",version:1,saved:new Date().toISOString(),periods:S.periods,savings:S.savings,phaseB:S.phaseB});
+  const data=JSON.stringify({app:"sahod-tracker",version:1,saved:new Date().toISOString(),periods:S.periods,savings:S.savings,phaseB:S.phaseB,salary:S.salary,leftover:S.leftover});
   const name="sahod-backup-"+iso(new Date())+".json";
   try{const file=new File([data],name,{type:"application/json"});
     if(navigator.canShare&&navigator.canShare({files:[file]})&&/iPhone|iPad|iPod/.test(navigator.userAgent)){
@@ -467,7 +537,7 @@ function readBackup(txt){
     periods[k]={items:o.periods[k].items.filter(x=>x&&x.amt>0&&x.cat&&x.date).map(x=>({id:String(x.id),amt:+x.amt,cat:String(x.cat),note:String(x.note||"").slice(0,60),date:String(x.date),t:+x.t||0}))};});
   const ticks=Array.isArray(o.savings.ticks)&&o.savings.ticks.length===TICKS?o.savings.ticks.map(Boolean):Array(TICKS).fill(false);
   const d=new Date(o.saved);
-  return{periods,phaseB:normB(o.phaseB),savings:{start:/^\d{4}-\d{2}$/.test(o.savings.start)?o.savings.start:"2026-11",ticks},label:isNaN(d)?"an unknown date":MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear()};
+  return{periods,phaseB:normB(o.phaseB),salary:normSal(o.salary),leftover:normLeft(o.leftover),savings:{start:/^\d{4}-\d{2}$/.test(o.savings.start)?o.savings.start:"2026-11",ticks},label:isNaN(d)?"an unknown date":MON[d.getMonth()]+" "+d.getDate()+", "+d.getFullYear()};
 }
 document.getElementById("importF").addEventListener("change",e=>{
   const f=e.target.files&&e.target.files[0];if(!f)return;
@@ -506,7 +576,7 @@ function beep(){if(!actx)return;const t=actx.currentTime;[0,.18,.36].forEach((o,
   os.type="square";os.frequency.value=j===2?1320:988;g.gain.setValueAtTime(.0001,t+o);g.gain.exponentialRampToValueAtTime(.25,t+o+.02);g.gain.exponentialRampToValueAtTime(.0001,t+o+.15);
   os.connect(g).connect(actx.destination);os.start(t+o);os.stop(t+o+.16);});}
 function ringAlarm(test){
-  document.getElementById("alarmText").textContent=test?"This is how the alarm sounds when you tick your 12th payday. Turn your volume up.":"You ticked all 12 paydays: "+peso(GOAL)+" saved. Your Emergency Shield is complete. Phase B is now active in your Savings tab: MP2 ₱3,500, index funds ₱2,200 and sinking funds ₱2,000 per payday.";
+  document.getElementById("alarmText").textContent=test?"This is how the alarm sounds when you tick your 12th payday. Turn your volume up.":"You ticked all 12 paydays: "+peso(goalA())+" saved. Your Emergency Shield is complete. Phase B is now active in your Savings tab: MP2, index funds and sinking funds every payday.";
   document.getElementById("alarm").hidden=false;
   try{actx=actx||new (window.AudioContext||window.webkitAudioContext)();actx.resume&&actx.resume();}catch(e){}
   beep();clearInterval(beepTimer);beepTimer=setInterval(()=>{beep();try{navigator.vibrate&&navigator.vibrate([300,150,300])}catch(e){}},900);
